@@ -1,0 +1,10 @@
+# Root gitignore
+node_modules/
+.env
+.env.local
+.env.production.local
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
