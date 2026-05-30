@@ -20,6 +20,8 @@ app.use(helmet())
 app.use(cors(corsOptions))
 app.use(express.json())
 
+app.get('/api/health', (req, res) => res.status(200).json({ status: 'ok' }))
+
 app.use('/api/auth', authRoutes)
 app.use('/api/students', studentRoutes)
 app.use('/api/teachers', teacherRoutes)
