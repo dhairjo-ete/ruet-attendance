@@ -25,6 +25,12 @@ export const promoteAllStudents = async (session) => {
   return data
 }
 
+export const bulkImportStudents = async (students) => {
+  const { data } = await axiosInstance.post('/admin/students/bulk-import', { students })
+  return data
+}
+
+
 export const getAllTeachers = async () => {
   const { data } = await axiosInstance.get('/admin/teachers')
   return data

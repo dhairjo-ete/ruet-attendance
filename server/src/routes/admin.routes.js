@@ -1,6 +1,6 @@
 import express from 'express'
 import {
-  addStudent, getAllStudents, deleteStudent, updateStudent, promoteAllStudents,
+  addStudent, getAllStudents, deleteStudent, updateStudent, promoteAllStudents, bulkImportStudents,
   addTeacher, getAllTeachers, deleteTeacher, updateTeacher,
   addCourse, getAllCourses, assignTeacherToCourse, updateCourse, deleteCourse,
 } from '../controllers/adminController.js'
@@ -17,6 +17,7 @@ router.post('/students', addStudent)
 router.delete('/students/:id', deleteStudent)
 router.put('/students/:id', updateStudent)
 router.put('/students/promote/all', promoteAllStudents)
+router.post('/students/bulk-import', bulkImportStudents)
 
 router.get('/teachers', getAllTeachers)
 router.post('/teachers', addTeacher)

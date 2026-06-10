@@ -58,6 +58,64 @@ export const addStudent = async (req, res) => {
   }
 }
 
+export const bulkImportStudents = async (req, res) => {
+  try {
+    const { students } = req.body
+    if (!students || !Array.isArray(students) || students.length === 0) {
+      return res.status(400).json({ message: 'No student data provided' })
+    }
+
+    const results = { added: 0, skipped: 0, errors: [] }
+
+    for (const row of students) {
+      const { name, studentId, registration, session, currentSemester, labGroup, email } = row
+
+      // Validate required fields
+      if (!name || !studentId || !registration || !session) {
+        results.errors.push(`Row skipped - missing required fields: ${studentId || 'unknown'}`)
+        results.skipped++
+        continue
+      }
+
+      // Check if student already exists
+      const exists = await Student.findOne({ studentId: studentId.toString().trim() })
+      if (exists) {
+        results.errors.push(`Student ID ${studentId} already exists - skipped`)
+        results.skipped++
+        continue
+      }
+
+      try {
+        const series = getSeriesFromSession(session.toString().trim())
+        await Student.create({
+          name: name.toString().trim(),
+          studentId: studentId.toString().trim(),
+          registration: registration.toString().trim(),
+          session: session.toString().trim(),
+          series,
+          labGroup: labGroup || 'first30',
+          email: email ? email.toString().trim() : '',
+          password: registration.toString().trim(),
+          currentSemester: currentSemester || '1st Year Odd Semester',
+        })
+        results.added++
+      } catch (err) {
+        results.errors.push(`Failed to add ${studentId}: ${err.message}`)
+        results.skipped++
+      }
+    }
+
+    res.status(200).json({
+      message: `Import complete. ${results.added} students added, ${results.skipped} skipped.`,
+      ...results
+    })
+  } catch (error) {
+    res.status(500).json({ message: error.message })
+  }
+}
+
+
+
 export const getAllStudents = async (req, res) => {
   try {
     const students = await Student.find()
