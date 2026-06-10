@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { getCourseById } from '../../services/courseService.js'
 import { getCourseAttendance } from '../../services/attendanceService.js'
+import * as XLSX from 'xlsx'
+
 
 const CourseStudents = () => {
   const { courseId } = useParams()
@@ -89,6 +91,104 @@ const CourseStudents = () => {
     ? Math.round(totalPresenceSum / studentCountWithRecords)
     : null
 
+  // ─── Excel Export ────────────────────────────────────────────────────────────
+  const exportToExcel = () => {
+    if (!course || !course.students) return
+
+    // Sort sessions ascending (oldest → newest) for column order
+    const sortedSessions = [...uniqueSessions].sort((a, b) => a.localeCompare(b))
+
+    // Build header row: Roll No. | Name | date1 | date2 | ... | Present | Total | %
+    const dateHeaders = sortedSessions.map(d => {
+      const dt = new Date(d)
+      return `${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}/${dt.getFullYear()}`
+    })
+    const headers = ['Roll No.', 'Name', 'Series', ...dateHeaders, 'Present', 'Total Classes', 'Attendance %', 'Status']
+
+    // Build a data row for every student sorted by studentId
+    const allStudentData = [...eligibleStudents, ...riskStudents, ...barredStudents]
+      .sort((a, b) => (a.student?.studentId || '').localeCompare(b.student?.studentId || ''))
+
+    const rows = allStudentData.map(({ student, total, present, percentage }) => {
+      // Per-date presence: P / A / - (no class that day)
+      const dateCells = sortedSessions.map(sessionDate => {
+        const dayRecords = attendanceRecords.filter(r => {
+          const sid = r.student?._id?.toString() || r.student?.toString()
+          const recDate = new Date(r.date).toISOString().split('T')[0]
+          return sid === student._id && recDate === sessionDate
+        })
+        if (dayRecords.length === 0) return '-'
+        return dayRecords[0].status === 'present' ? 'P' : 'A'
+      })
+
+      const status = percentage === null ? 'No Class' :
+                     percentage >= 75 ? 'Eligible' :
+                     percentage >= 50 ? 'At Risk' : 'Barred'
+
+      return [
+        student.studentId,
+        student.name,
+        student.series ? `'${student.series}` : 'N/A',
+        ...dateCells,
+        present,
+        total,
+        percentage !== null ? `${percentage}%` : 'N/A',
+        status
+      ]
+    })
+
+    // Build worksheet data
+    const wsData = [
+      // Title rows
+      [`Course Analysis Report`],
+      [`Course: ${course.courseCode} - ${course.courseTitle}`],
+      [`Semester: ${course.semester}`],
+      [`Total Classes: ${totalClassesHeld}   |   Enrolled: ${enrolledCount}   |   Average Attendance: ${averageAttendance !== null ? averageAttendance + '%' : 'N/A'}`],
+      [`Eligible (≥75%): ${eligibleStudents.length}   |   At Risk (50-74%): ${riskStudents.length}   |   Barred (<50%): ${barredStudents.length}`],
+      [], // blank row
+      headers,
+      ...rows
+    ]
+
+    const ws = XLSX.utils.aoa_to_sheet(wsData)
+
+    // Column widths
+    const colWidths = [
+      { wch: 12 }, // Roll No.
+      { wch: 28 }, // Name
+      { wch: 9  }, // Series
+      ...sortedSessions.map(() => ({ wch: 11 })), // date cols
+      { wch: 10 }, // Present
+      { wch: 14 }, // Total Classes
+      { wch: 14 }, // Attendance %
+      { wch: 12 }, // Status
+    ]
+    ws['!cols'] = colWidths
+
+    // Style the header row (row index 6, 0-based)
+    const headerRowIndex = 6
+    headers.forEach((_, colIdx) => {
+      const cellAddr = XLSX.utils.encode_cell({ r: headerRowIndex, c: colIdx })
+      if (!ws[cellAddr]) return
+      ws[cellAddr].s = {
+        font: { bold: true, color: { rgb: 'FFFFFF' } },
+        fill: { fgColor: { rgb: '3949AB' } },
+        alignment: { horizontal: 'center' }
+      }
+    })
+
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Attendance Analysis')
+
+    const fileName = `${course.courseCode}_${course.courseTitle}_Attendance.xlsx`
+      .replace(/[^a-zA-Z0-9._-]/g, '_')
+
+    XLSX.writeFile(wb, fileName)
+  }
+  // ─────────────────────────────────────────────────────────────────────────────
+
+
+
   // Get active list based on selected category tab (for regular courses)
   const getActiveList = () => {
     if (activeTab === 'eligible') return eligibleStudents
@@ -134,10 +234,23 @@ const CourseStudents = () => {
           </div>
         </div>
         {course && (
-          <span className="bg-indigo-50 text-indigo-700 text-xs font-bold px-3 py-1.5 rounded-xl border border-indigo-100">
-            {course.courseCode}
-          </span>
+          <div className="flex items-center gap-3">
+            {!isProjectOrSupervised && !loading && (
+              <button
+                type="button"
+                onClick={exportToExcel}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold rounded-xl shadow-sm transition-all cursor-pointer"
+              >
+                <span>⬇️</span>
+                Export Excel
+              </button>
+            )}
+            <span className="bg-indigo-50 text-indigo-700 text-xs font-bold px-3 py-1.5 rounded-xl border border-indigo-100">
+              {course.courseCode}
+            </span>
+          </div>
         )}
+
       </nav>
 
       {/* Main Content */}
